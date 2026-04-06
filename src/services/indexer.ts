@@ -2,9 +2,6 @@ import type { AppConfig } from "../config.js";
 import type { Logger } from "../logger.js";
 import { ComponentStore, type ComponentMap } from "../cache/component-store.js";
 import { VersionMapStore, type VersionMap } from "../cache/version-map.js";
-import { RegistryClient } from "../connectors/registry/client.js";
-import { parseDtsFiles } from "../connectors/registry/dts-parser.js";
-import { extractTarball } from "../connectors/registry/tarball.js";
 import { fetchStorybookIndex, mapStorybookComponents } from "../connectors/storybook/index-fetcher.js";
 import { mergeComponentData } from "../merge/component-merger.js";
 import type { ComponentInfo, SearchResult } from "../types/component.js";
@@ -12,7 +9,6 @@ import type { ComponentInfo, SearchResult } from "../types/component.js";
 const SCOPE_PREFIX = "@rds-vue-ui/";
 
 export class ComponentIndexer {
-  private readonly registryClient: RegistryClient;
   private readonly componentStore: ComponentStore;
   private readonly versionMapStore: VersionMapStore;
   private versionMap: VersionMap = {};
@@ -22,10 +18,6 @@ export class ComponentIndexer {
     private readonly config: AppConfig,
     private readonly logger: Logger,
   ) {
-    this.registryClient = new RegistryClient({
-      baseUrl: config.NPM_REGISTRY_URL,
-      token: config.NPM_REGISTRY_TOKEN,
-    });
     this.componentStore = new ComponentStore(config.CACHE_DIR);
     this.versionMapStore = new VersionMapStore(config.CACHE_DIR);
   }
@@ -36,70 +28,64 @@ export class ComponentIndexer {
   }
 
   async refresh(packages?: string[]): Promise<{ refreshed: number; skipped: number }> {
-    const search = await this.registryClient.searchPackages("@rds-vue-ui", 250);
-    const latestVersionMap = Object.fromEntries(
-      search.objects
-        .map((o) => [o.package.name, o.package.version])
-        .filter(([name]) => name.startsWith(SCOPE_PREFIX)),
-    );
-
     const storybookMap = await this.safeGetStorybookMap();
+    if (Object.keys(storybookMap).length === 0) {
+      this.logger.warn("storybook map empty; keeping previously indexed components");
+      return { refreshed: 0, skipped: 0 };
+    }
 
     const requested = packages && packages.length > 0 ? new Set(packages.map((p) => this.normalizePackageName(p))) : null;
-    const packageNames = requested ? Object.keys(latestVersionMap).filter((p) => requested.has(p)) : Object.keys(latestVersionMap);
+    const packageNames = requested ? Object.keys(storybookMap).filter((p) => requested.has(p)) : Object.keys(storybookMap);
 
     let refreshed = 0;
     let skipped = 0;
+    let failed = 0;
+    const nowIso = new Date().toISOString();
 
     for (const packageName of packageNames) {
-      const nextVersion = latestVersionMap[packageName];
-      const currentVersion = this.versionMap[packageName];
+      try {
+        const storybookMeta = storybookMap[packageName];
+        const nextVersion = JSON.stringify({
+          componentName: storybookMeta.componentName,
+          category: storybookMeta.category,
+          stories: storybookMeta.stories.map((story) => `${story.id}:${story.name}`),
+          mappingConfidence: storybookMeta.mappingConfidence,
+        });
+        const currentVersion = this.versionMap[packageName];
 
-      if (!requested && currentVersion === nextVersion && this.components[packageName]) {
-        skipped += 1;
-        continue;
-      }
-
-      const registryMeta = await this.registryClient.getPackageMetadata(packageName);
-      const latestVersion = registryMeta["dist-tags"].latest ?? nextVersion;
-      const latestVersionMeta = registryMeta.versions[latestVersion];
-      const tarballUrl = latestVersionMeta?.dist?.tarball;
-
-      let parsed = { props: [], events: [], slots: [] } as ReturnType<typeof parseDtsFiles>;
-      if (tarballUrl) {
-        try {
-          const buffer = await this.registryClient.downloadTarball(tarballUrl);
-          const extracted = await extractTarball(buffer);
-          parsed = parseDtsFiles(extracted.dtsFiles);
-        } catch (error) {
-          this.logger.warn({ error, packageName }, "d.ts parse failed; continuing with metadata only");
+        if (!requested && currentVersion === nextVersion && this.components[packageName]) {
+          skipped += 1;
+          continue;
         }
+
+        this.components[packageName] = mergeComponentData({
+          packageName,
+          nowIso,
+          latestVersion: "storybook-only",
+          storybookMeta,
+          registryUrl: this.config.NPM_REGISTRY_URL,
+        });
+        this.versionMap[packageName] = nextVersion;
+        refreshed += 1;
+      } catch (error) {
+        failed += 1;
+        this.logger.warn({ error, packageName }, "storybook component merge failed; keeping previous cached record");
       }
-
-      const merged = mergeComponentData({
-        packageName,
-        nowIso: new Date().toISOString(),
-        registryMeta,
-        latestVersion,
-        latestVersionMeta,
-        parsedRegistry: parsed,
-        storybookMeta: storybookMap[packageName],
-        registryUrl: this.config.NPM_REGISTRY_URL,
-      });
-
-      this.components[packageName] = merged;
-      this.versionMap[packageName] = latestVersion;
-      refreshed += 1;
     }
 
-    for (const existing of Object.keys(this.components)) {
-      if (!latestVersionMap[existing]) {
-        delete this.components[existing];
-        delete this.versionMap[existing];
+    if (!requested && failed === 0) {
+      for (const existing of Object.keys(this.components)) {
+        if (!storybookMap[existing]) {
+          delete this.components[existing];
+          delete this.versionMap[existing];
+        }
       }
+    } else if (!requested && failed > 0) {
+      this.logger.warn({ failed }, "skipping stale component pruning because refresh had merge failures");
     }
 
     await this.persist();
+    this.logger.info({ refreshed, skipped, failed }, "storybook refresh completed");
     return { refreshed, skipped };
   }
 
@@ -227,7 +213,7 @@ export class ComponentIndexer {
       const index = await fetchStorybookIndex(this.config.STORYBOOK_URL);
       return mapStorybookComponents(index);
     } catch (error) {
-      this.logger.warn({ error }, "storybook index unavailable; continuing with registry-only data");
+      this.logger.warn({ error }, "storybook index unavailable; refresh aborted");
       return {};
     }
   }

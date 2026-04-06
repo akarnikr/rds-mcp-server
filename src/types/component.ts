@@ -44,6 +44,7 @@ export interface ComponentInfo {
   sourceMeta: {
     storybook: boolean;
     registry: boolean;
+    mappingConfidence: "high" | "medium" | "low";
   };
 }
 

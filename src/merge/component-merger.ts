@@ -5,17 +5,17 @@ import type { StorybookComponentMeta } from "../types/storybook.js";
 export interface MergeInput {
   packageName: string;
   nowIso: string;
-  registryMeta: RegistryPackageMeta;
-  latestVersion: string;
+  registryMeta?: RegistryPackageMeta;
+  latestVersion?: string;
   latestVersionMeta?: RegistryVersionMeta;
-  parsedRegistry: {
+  parsedRegistry?: {
     componentName?: string;
     props: PropDef[];
     events: EventDef[];
     slots: SlotDef[];
   };
   storybookMeta?: StorybookComponentMeta;
-  registryUrl: string;
+  registryUrl?: string;
 }
 
 function inferComponentName(packageName: string): string {
@@ -28,27 +28,38 @@ function inferComponentName(packageName: string): string {
 }
 
 export function mergeComponentData(input: MergeInput): ComponentInfo {
-  const componentName = input.storybookMeta?.componentName ?? input.parsedRegistry.componentName ?? inferComponentName(input.packageName);
+  const parsedRegistry = input.parsedRegistry ?? {
+    props: [] as PropDef[],
+    events: [] as EventDef[],
+    slots: [] as SlotDef[],
+  };
+  const latestVersion = input.latestVersion ?? "storybook-only";
+  const componentName = input.storybookMeta?.componentName ?? parsedRegistry.componentName ?? inferComponentName(input.packageName);
   const stories: StoryInfo[] = input.storybookMeta?.stories ?? [];
+  const hasRegistryData = Boolean(input.registryMeta || input.latestVersionMeta || parsedRegistry.componentName || parsedRegistry.props.length || parsedRegistry.events.length || parsedRegistry.slots.length);
+  const installCommand = input.registryUrl
+    ? `npm install ${input.packageName} --registry ${input.registryUrl}`
+    : `npm install ${input.packageName}`;
 
   return {
     name: componentName,
     package: input.packageName,
-    version: input.latestVersion,
-    description: input.registryMeta.description ?? input.latestVersionMeta?.description,
+    version: latestVersion,
+    description: input.registryMeta?.description ?? input.latestVersionMeta?.description,
     category: input.storybookMeta?.category,
     stories,
-    props: input.parsedRegistry.props,
-    events: input.parsedRegistry.events,
-    slots: input.parsedRegistry.slots,
+    props: parsedRegistry.props,
+    events: parsedRegistry.events,
+    slots: parsedRegistry.slots,
     peerDependencies: input.latestVersionMeta?.peerDependencies ?? {},
     importStatement: `import { ${componentName} } from '${input.packageName}'`,
-    installCommand: `npm install ${input.packageName} --registry ${input.registryUrl}`,
-    lastPublished: input.registryMeta.time?.[input.latestVersion],
+    installCommand,
+    lastPublished: input.registryMeta?.time?.[latestVersion],
     lastIndexed: input.nowIso,
     sourceMeta: {
       storybook: Boolean(input.storybookMeta),
-      registry: true,
+      registry: hasRegistryData,
+      mappingConfidence: input.storybookMeta?.mappingConfidence ?? "low",
     },
   };
 }

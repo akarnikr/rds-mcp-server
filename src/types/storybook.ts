@@ -14,4 +14,5 @@ export interface StorybookComponentMeta {
   componentName: string;
   category?: string;
   stories: Array<{ id: string; name: string }>;
+  mappingConfidence: "high" | "medium" | "low";
 }

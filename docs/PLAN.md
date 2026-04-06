@@ -6,16 +6,18 @@ Build an MCP server that gives AI coding agents accurate, current, and actionabl
 ## High-Level Strategy
 Implement in phased increments to de-risk delivery:
 
-1. Phase 1 (MVP): Core discovery/codegen over stdio with registry + Storybook index integration.
+1. Phase 1 (MVP): Core discovery/codegen over stdio with Storybook-first indexing and optional registry enrichment.
 2. Phase 2: Playwright-powered Storybook scraping for tokens and screenshots.
 3. Phase 3: Freshness automation with polling, diff-based re-indexing, and update tools.
 4. Phase 4: Remote deployment over HTTP with auth and operational hardening.
 5. Phase 5: Advanced features (validation, accessibility metadata, prerelease channels, patterns).
 
 ## Source Priority Policy
-- Storybook-first for category/story organization and docs-oriented labels.
-- Registry fallback for missing/stale API details (props/events/slots/dependencies/version).
-- Each merged record should keep source metadata and `lastIndexed` timestamps.
+- Storybook is the baseline source for discovery and indexing.
+- Registry is a non-blocking enrichment source for API metadata when available.
+- Each merged record keeps source metadata and `lastIndexed` timestamps so clients can reason about completeness.
+- Storybook mapping applies confidence scoring and excludes non-component sections to reduce false package inference.
+- Refresh operations are partial-failure tolerant and avoid destructive pruning when merge errors occur.
 
 ## Cross-Phase Non-Functional Requirements
 - Deterministic JSON tool responses.
