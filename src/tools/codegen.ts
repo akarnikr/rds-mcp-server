@@ -10,9 +10,12 @@ export const GetInstallationInfoInput = z.object({
   components: z.array(z.string().min(1)).min(1),
 });
 
+export type GetComponentUsageInputShape = z.input<typeof GetComponentUsageInput>;
+export type GetInstallationInfoInputShape = z.input<typeof GetInstallationInfoInput>;
+
 export function createCodegenTools(indexer: ComponentIndexer) {
   return {
-    getComponentUsage: async (input: z.infer<typeof GetComponentUsageInput>) => {
+    getComponentUsage: async (input: GetComponentUsageInputShape) => {
       const usage = indexer.getUsage(input.component, input.variant);
       if (!usage) {
         return { error: `Component not found: ${input.component}` };
@@ -20,6 +23,6 @@ export function createCodegenTools(indexer: ComponentIndexer) {
       return usage;
     },
 
-    getInstallationInfo: async (input: z.infer<typeof GetInstallationInfoInput>) => indexer.getInstallationInfo(input.components),
+    getInstallationInfo: async (input: GetInstallationInfoInputShape) => indexer.getInstallationInfo(input.components),
   };
 }

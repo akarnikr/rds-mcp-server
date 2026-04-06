@@ -13,9 +13,13 @@ export const GetComponentDetailsInput = z.object({
   component: z.string().min(1),
 });
 
+export type ListComponentsInputShape = z.input<typeof ListComponentsInput>;
+export type SearchComponentsInputShape = z.input<typeof SearchComponentsInput>;
+export type GetComponentDetailsInputShape = z.input<typeof GetComponentDetailsInput>;
+
 export function createDiscoveryTools(indexer: ComponentIndexer) {
   return {
-    listComponents: async (input: z.infer<typeof ListComponentsInput>) => {
+    listComponents: async (input: ListComponentsInputShape) => {
       const components = indexer.list(input.category).map((component) => ({
         name: component.name,
         package: component.package,
@@ -28,12 +32,12 @@ export function createDiscoveryTools(indexer: ComponentIndexer) {
       return { components };
     },
 
-    searchComponents: async (input: z.infer<typeof SearchComponentsInput>) => ({
+    searchComponents: async (input: SearchComponentsInputShape) => ({
       query: input.query,
       results: indexer.search(input.query),
     }),
 
-    getComponentDetails: async (input: z.infer<typeof GetComponentDetailsInput>) => {
+    getComponentDetails: async (input: GetComponentDetailsInputShape) => {
       const component = indexer.getComponent(input.component);
       if (!component) {
         return {
