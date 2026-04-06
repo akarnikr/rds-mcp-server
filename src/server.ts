@@ -1,5 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import type { ComponentIndexer } from "./services/indexer.js";
+import type { StorybookVisualsService } from "./services/storybook-visuals.js";
 import {
   GetComponentDetailsInput,
   ListComponentsInput,
@@ -11,6 +13,13 @@ import {
   GetInstallationInfoInput,
   createCodegenTools,
 } from "./tools/codegen.js";
+import {
+  GetDesignTokensInput,
+  GetFoundationGuidelinesInput,
+  ListThemesInput,
+  ScreenshotStoryInput,
+  createFoundationTools,
+} from "./tools/foundation.js";
 
 function asMcpText(data: unknown) {
   return {
@@ -18,15 +27,22 @@ function asMcpText(data: unknown) {
   };
 }
 
-export function createMcpServer(indexer: ComponentIndexer) {
-  // `any` avoids expensive generic inference from MCP SDK that can spike tsc memory.
-  const server: any = new McpServer({
+function createValidatedHandler<T>(schema: z.ZodType<T>, handler: (input: T) => Promise<unknown>) {
+  return async (input: unknown) => {
+    const parsed = schema.parse(input);
+    return asMcpText(await handler(parsed));
+  };
+}
+
+export function createMcpServer(indexer: ComponentIndexer, visuals: StorybookVisualsService) {
+  const server = new McpServer({
     name: "rds-vue-ui",
     version: "0.1.0",
   });
 
   const discovery = createDiscoveryTools(indexer);
   const codegen = createCodegenTools(indexer);
+  const foundation = createFoundationTools(visuals);
 
   server.registerTool(
     "list_components",
@@ -34,7 +50,7 @@ export function createMcpServer(indexer: ComponentIndexer) {
       description: "Returns RDS component inventory grouped by category",
       inputSchema: ListComponentsInput,
     },
-    async (input: any) => asMcpText(await discovery.listComponents(input)),
+    createValidatedHandler(ListComponentsInput, (input) => discovery.listComponents(input)),
   );
 
   server.registerTool(
@@ -43,7 +59,7 @@ export function createMcpServer(indexer: ComponentIndexer) {
       description: "Fuzzy search across components and prop names",
       inputSchema: SearchComponentsInput,
     },
-    async (input: any) => asMcpText(await discovery.searchComponents(input)),
+    createValidatedHandler(SearchComponentsInput, (input) => discovery.searchComponents(input)),
   );
 
   server.registerTool(
@@ -52,7 +68,7 @@ export function createMcpServer(indexer: ComponentIndexer) {
       description: "Returns detailed API information for one component",
       inputSchema: GetComponentDetailsInput,
     },
-    async (input: any) => asMcpText(await discovery.getComponentDetails(input)),
+    createValidatedHandler(GetComponentDetailsInput, (input) => discovery.getComponentDetails(input)),
   );
 
   server.registerTool(
@@ -61,7 +77,7 @@ export function createMcpServer(indexer: ComponentIndexer) {
       description: "Returns ready-to-paste Vue usage examples",
       inputSchema: GetComponentUsageInput,
     },
-    async (input: any) => asMcpText(await codegen.getComponentUsage(input)),
+    createValidatedHandler(GetComponentUsageInput, (input) => codegen.getComponentUsage(input)),
   );
 
   server.registerTool(
@@ -70,7 +86,43 @@ export function createMcpServer(indexer: ComponentIndexer) {
       description: "Returns install commands and peer dependency information",
       inputSchema: GetInstallationInfoInput,
     },
-    async (input: any) => asMcpText(await codegen.getInstallationInfo(input)),
+    createValidatedHandler(GetInstallationInfoInput, (input) => codegen.getInstallationInfo(input)),
+  );
+
+  server.registerTool(
+    "list_themes",
+    {
+      description: "Returns discovered Storybook foundation themes",
+      inputSchema: ListThemesInput,
+    },
+    createValidatedHandler(ListThemesInput, (input) => foundation.listThemes(input)),
+  );
+
+  server.registerTool(
+    "get_design_tokens",
+    {
+      description: "Returns extracted design tokens for a theme",
+      inputSchema: GetDesignTokensInput,
+    },
+    createValidatedHandler(GetDesignTokensInput, (input) => foundation.getDesignTokens(input)),
+  );
+
+  server.registerTool(
+    "get_foundation_guidelines",
+    {
+      description: "Returns extracted foundation guidance for a theme",
+      inputSchema: GetFoundationGuidelinesInput,
+    },
+    createValidatedHandler(GetFoundationGuidelinesInput, (input) => foundation.getFoundationGuidelines(input)),
+  );
+
+  server.registerTool(
+    "screenshot_story",
+    {
+      description: "Captures a Storybook story screenshot using Playwright",
+      inputSchema: ScreenshotStoryInput,
+    },
+    createValidatedHandler(ScreenshotStoryInput, (input) => foundation.screenshotStory(input)),
   );
 
   return server;

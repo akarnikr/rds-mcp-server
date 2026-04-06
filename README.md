@@ -14,6 +14,18 @@ Implemented:
   - `get_component_usage`
   - `get_installation_info`
 
+## Phase 2 Status
+Implemented:
+- Playwright-backed Storybook foundations extraction
+- Incremental theme/token/guideline cache persisted under `CACHE_DIR`
+- Delay between Storybook calls to reduce transient 404/early-load issues
+- Partial failure handling (failed story extraction does not fail full refresh)
+- visual tools:
+  - `list_themes`
+  - `get_design_tokens`
+  - `get_foundation_guidelines`
+  - `screenshot_story`
+
 ## Setup
 1. Install dependencies:
 ```bash
@@ -27,6 +39,7 @@ cp .env.example .env
 
 `NPM_REGISTRY_TOKEN` is optional while the registry is public.
 The server auto-loads `.env` at startup.
+Use `STORYBOOK_CALL_DELAY_MS` to tune request pacing between Storybook calls.
 
 3. Build:
 ```bash

@@ -11,6 +11,9 @@ export const GetInstallationInfoInput = z.object({
   components: z.array(z.string().min(1)).min(1),
 });
 
+export type GetComponentUsageInputShape = z.input<typeof GetComponentUsageInput>;
+export type GetInstallationInfoInputShape = z.input<typeof GetInstallationInfoInput>;
+
 function getMetadataCompleteness(component: ComponentInfo) {
   const missingFields: string[] = [];
   if (!component.description) {
@@ -41,7 +44,7 @@ function getMetadataCompleteness(component: ComponentInfo) {
 
 export function createCodegenTools(indexer: ComponentIndexer) {
   return {
-    getComponentUsage: async (input: z.infer<typeof GetComponentUsageInput>) => {
+    getComponentUsage: async (input: GetComponentUsageInputShape) => {
       const usage = indexer.getUsage(input.component, input.variant);
       const component = indexer.getComponent(input.component);
       if (!usage) {
@@ -64,7 +67,7 @@ export function createCodegenTools(indexer: ComponentIndexer) {
       };
     },
 
-    getInstallationInfo: async (input: z.infer<typeof GetInstallationInfoInput>) => {
+    getInstallationInfo: async (input: GetInstallationInfoInputShape) => {
       const info = indexer.getInstallationInfo(input.components);
       const unresolved = input.components.filter((ref) => !indexer.getComponent(ref));
       const lowConfidenceMappings = input.components
