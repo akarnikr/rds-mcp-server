@@ -1,1 +1,32 @@
+# Environment and secrets
 .env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Runtime/cache artifacts
+cache/
+tmp/
+temp/
+*.log
+
+# Test and coverage output
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# Playwright/browser caches
+.playwright/
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/
